@@ -192,10 +192,21 @@ async function fetchNEAWeather() {
     try {
         // NEA Real-time Weather Readings API
         const response = await fetch('https://api.data.gov.sg/v1/environment/2-hour-weather-forecast');
+        
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+        
         const data = await response.json();
+        
+        if (!data.items || data.items.length === 0) {
+            throw new Error('No weather data available');
+        }
+        
         return data;
     } catch (error) {
         console.error('Error fetching NEA weather:', error);
+        showNotification(`⚠️ Weather API unavailable: ${error.message}`, 'error');
         return null;
     }
 }
@@ -232,51 +243,75 @@ function updateWeather(cleanup) {
     const weatherContainer = document.getElementById('weatherContainer');
     
     // Show loading state
-    weatherContainer.innerHTML = '<p class="placeholder">📍 Loading weather data...</p>';
+    weatherContainer.innerHTML = `
+        <div class="loading-container">
+            <div class="loading-spinner"></div>
+            <span>Loading weather data...</span>
+        </div>
+    `;
 
     // Fetch real weather from NEA
     fetchNEAWeather().then(data => {
-        if (!data || !data.items || data.items.length === 0) {
-            weatherContainer.innerHTML = '<p class="error">Unable to load weather data. Please try again.</p>';
-            return;
-        }
+        try {
+            if (!data || !data.items || data.items.length === 0) {
+                throw new Error('No forecast data received');
+            }
 
-        // Build 4-day forecast from available data points
-        const forecasts = data.items.slice(0, 4); // Get up to 4 days
-        let forecastHTML = '';
+            // Build 4-day forecast from available data points
+            const forecasts = data.items.slice(0, 4); // Get up to 4 days
+            let forecastHTML = '';
 
-        forecasts.forEach((item, index) => {
-            const forecastTime = new Date(item.valid_period.start);
-            const dayName = forecastTime.toLocaleDateString('en-SG', { weekday: 'short', month: 'short', day: 'numeric' });
-            const timeRange = new Date(item.valid_period.start).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' }) + 
-                              ' - ' + 
-                              new Date(item.valid_period.end).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' });
+            forecasts.forEach((item, index) => {
+                try {
+                    const forecastTime = new Date(item.valid_period.start);
+                    const dayName = forecastTime.toLocaleDateString('en-SG', { weekday: 'short', month: 'short', day: 'numeric' });
+                    const timeRange = new Date(item.valid_period.start).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' }) + 
+                                      ' - ' + 
+                                      new Date(item.valid_period.end).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' });
 
-            // Get forecast for general area (first zone)
-            const forecast = item.general ? item.general : {};
-            const condition = forecast.forecast || 'Fair';
-            const emoji = getWeatherEmoji(condition);
+                    // Get forecast for general area (first zone)
+                    const forecast = item.general ? item.general : {};
+                    const condition = forecast.forecast || 'Fair';
+                    const emoji = getWeatherEmoji(condition);
 
+                    forecastHTML += `
+                        <div class="weather-card">
+                            <h4>${dayName}</h4>
+                            <p class="weather-time">${timeRange}</p>
+                            <div class="weather-emoji">${emoji}</div>
+                            <p class="weather-condition">${condition}</p>
+                            <small>🌍 General Forecast</small>
+                        </div>
+                    `;
+                } catch (itemError) {
+                    console.warn('Error processing forecast item:', itemError);
+                }
+            });
+
+            // Add disclaimer about zones
             forecastHTML += `
-                <div class="weather-card">
-                    <h4>${dayName}</h4>
-                    <p class="weather-time">${timeRange}</p>
-                    <div class="weather-emoji">${emoji}</div>
-                    <p class="weather-condition">${condition}</p>
-                    <small>🌍 General Forecast</small>
+                <div style="grid-column: 1 / -1; padding: 12px; background: #E8F4F8; border-radius: 8px; font-size: 0.9rem; color: #1A3A52;">
+                    <strong>ℹ️ Note:</strong> Forecast data provided by National Environment Agency (NEA) Singapore. 
+                    Data updated every 30 minutes. Select a cleanup to see detailed weather for that location.
                 </div>
             `;
-        });
 
-        // Add disclaimer about zones
-        forecastHTML += `
-            <div style="grid-column: 1 / -1; padding: 12px; background: #E8F4F8; border-radius: 8px; font-size: 0.9rem; color: #1A3A52;">
-                <strong>ℹ️ Note:</strong> Forecast data provided by National Environment Agency (NEA) Singapore. 
-                Data updated every 30 minutes. Select a cleanup to see detailed weather for that location.
+            weatherContainer.innerHTML = forecastHTML;
+        } catch (error) {
+            console.error('Error rendering weather:', error);
+            weatherContainer.innerHTML = `
+                <div class="error" style="grid-column: 1 / -1;">
+                    <strong>❌ Error:</strong> Could not render weather forecast. ${error.message}
+                </div>
+            `;
+        }
+    }).catch(error => {
+        console.error('Unexpected error in weather update:', error);
+        weatherContainer.innerHTML = `
+            <div class="error" style="grid-column: 1 / -1;">
+                <strong>❌ Error:</strong> An unexpected error occurred while loading weather.
             </div>
         `;
-
-        weatherContainer.innerHTML = forecastHTML;
     });
 }
 
@@ -355,33 +390,61 @@ function renderCleanups(cleanupsToRender = appState.cleanups) {
 // ============================================
 
 function joinCleanup(cleanupId) {
-    const cleanup = appState.cleanups.find(c => c.id === cleanupId);
-    if (cleanup) {
+    try {
+        const cleanup = appState.cleanups.find(c => c.id === cleanupId);
+        if (!cleanup) {
+            throw new Error('Cleanup not found');
+        }
+        
         cleanup.members += 1;
         appState.currentUser.cleanupsJoined += 1;
         appState.currentUser.totalImpact += cleanup.impact;
         updateImpactDashboard();
         renderCleanups();
         showNotification(`✓ You joined "${cleanup.title}"!`, 'success');
+    } catch (error) {
+        console.error('Error joining cleanup:', error);
+        showNotification(`❌ Error: Could not join cleanup. ${error.message}`, 'error');
     }
 }
 
 function shareCleanup(cleanupId) {
-    const cleanup = appState.cleanups.find(c => c.id === cleanupId);
-    if (cleanup) {
+    try {
+        const cleanup = appState.cleanups.find(c => c.id === cleanupId);
+        if (!cleanup) {
+            throw new Error('Cleanup not found');
+        }
+        
         const text = `Join me at ${cleanup.title} on ${cleanup.date}! Help clean our beaches. #ShoreSquad`;
+        
         if (navigator.share) {
             navigator.share({
                 title: 'ShoreSquad',
                 text: text,
                 url: window.location.href
-            }).catch(err => console.log('Share error:', err));
+            }).catch(err => {
+                if (err.name !== 'AbortError') {
+                    console.warn('Share error:', err);
+                    fallbackCopyShare(text);
+                }
+            });
         } else {
             // Fallback: Copy to clipboard
-            navigator.clipboard.writeText(text);
-            showNotification('✓ Copied to clipboard!', 'success');
+            fallbackCopyShare(text);
         }
+    } catch (error) {
+        console.error('Error sharing cleanup:', error);
+        showNotification(`❌ Error: Could not share cleanup. ${error.message}`, 'error');
     }
+}
+
+function fallbackCopyShare(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showNotification('✓ Copied to clipboard!', 'success');
+    }).catch(err => {
+        console.error('Clipboard error:', err);
+        showNotification('⚠️ Could not copy to clipboard', 'error');
+    });
 }
 
 // ============================================
@@ -389,31 +452,48 @@ function shareCleanup(cleanupId) {
 // ============================================
 
 function filterCleanups() {
-    const searchInput = document.getElementById('searchInput').value.toLowerCase();
-    const dateFilter = document.getElementById('dateFilter').value;
-
-    const filtered = appState.cleanups.filter(cleanup => {
-        const matchesSearch = cleanup.title.toLowerCase().includes(searchInput) ||
-                              cleanup.location.toLowerCase().includes(searchInput) ||
-                              cleanup.crew.toLowerCase().includes(searchInput);
-
-        let matchesDate = true;
-        const today = new Date();
-        const cleanupDate = new Date(cleanup.date);
-
-        if (dateFilter === 'today') {
-            matchesDate = cleanupDate.toDateString() === today.toDateString();
-        } else if (dateFilter === 'week') {
-            const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-            matchesDate = cleanupDate >= today && cleanupDate <= nextWeek;
-        } else if (dateFilter === 'month') {
-            matchesDate = cleanupDate.getMonth() === today.getMonth();
+    try {
+        const searchInput = document.getElementById('searchInput');
+        const dateFilter = document.getElementById('dateFilter');
+        
+        if (!searchInput || !dateFilter) {
+            throw new Error('Filter elements not found');
         }
 
-        return matchesSearch && matchesDate;
-    });
+        const searchTerm = searchInput.value.toLowerCase();
+        const filterValue = dateFilter.value;
 
-    renderCleanups(filtered);
+        const filtered = appState.cleanups.filter(cleanup => {
+            try {
+                const matchesSearch = cleanup.title.toLowerCase().includes(searchTerm) ||
+                                      cleanup.location.toLowerCase().includes(searchTerm) ||
+                                      cleanup.crew.toLowerCase().includes(searchTerm);
+
+                let matchesDate = true;
+                const today = new Date();
+                const cleanupDate = new Date(cleanup.date);
+
+                if (filterValue === 'today') {
+                    matchesDate = cleanupDate.toDateString() === today.toDateString();
+                } else if (filterValue === 'week') {
+                    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+                    matchesDate = cleanupDate >= today && cleanupDate <= nextWeek;
+                } else if (filterValue === 'month') {
+                    matchesDate = cleanupDate.getMonth() === today.getMonth();
+                }
+
+                return matchesSearch && matchesDate;
+            } catch (itemError) {
+                console.warn('Error filtering item:', itemError);
+                return false;
+            }
+        });
+
+        renderCleanups(filtered);
+    } catch (error) {
+        console.error('Error filtering cleanups:', error);
+        showNotification(`⚠️ Filter error: ${error.message}`, 'error');
+    }
 }
 
 // ============================================
@@ -427,27 +507,49 @@ function updateImpactDashboard() {
 }
 
 // ============================================
-// Utility: Notifications
+// Utility: Notifications with Styling
 // ============================================
 
 function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `${type} notification`;
-    notification.textContent = message;
-    notification.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        background: ${type === 'success' ? '#2ECC71' : '#0077BE'};
-        color: white;
-        border-radius: 8px;
-        z-index: 1000;
-        animation: slideIn 0.3s ease;
-    `;
-    
-    document.body.appendChild(notification);
-    setTimeout(() => notification.remove(), 3000);
+    try {
+        const notification = document.createElement('div');
+        notification.className = `${type} notification`;
+        notification.setAttribute('role', 'alert');
+        notification.setAttribute('aria-live', 'polite');
+        notification.textContent = message;
+        
+        const bgColor = type === 'success' ? '#2ECC71' : 
+                        type === 'error' ? '#FF6B6B' : 
+                        '#0077BE';
+        
+        notification.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 14px 20px;
+            background: ${bgColor};
+            color: white;
+            border-radius: 8px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            font-weight: 600;
+            max-width: 300px;
+            word-wrap: break-word;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    } catch (error) {
+        console.error('Error showing notification:', error);
+        // Fallback to console
+        console.log(`[${type.toUpperCase()}] ${message}`);
+    }
 }
 
 // ============================================
@@ -493,62 +595,76 @@ function setupMobileNav() {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize map
-    initMap();
+    try {
+        // Initialize map
+        initMap();
 
-    // Initialize impact dashboard
-    updateImpactDashboard();
+        // Initialize impact dashboard
+        updateImpactDashboard();
 
-    // Render cleanups
-    renderCleanups();
+        // Render cleanups
+        renderCleanups();
 
-    // Setup mobile navigation
-    setupMobileNav();
+        // Setup mobile navigation
+        setupMobileNav();
 
-    // Load and display initial weather on page load
-    updateWeather(null);
+        // Load and display initial weather on page load
+        updateWeather(null);
 
-    // Setup search and filter listeners with debouncing
-    const searchInput = document.getElementById('searchInput');
-    const dateFilter = document.getElementById('dateFilter');
+        // Setup search and filter listeners with debouncing
+        const searchInput = document.getElementById('searchInput');
+        const dateFilter = document.getElementById('dateFilter');
 
-    if (searchInput) {
-        searchInput.addEventListener('input', debounce(filterCleanups, 300));
-    }
+        if (searchInput) {
+            searchInput.addEventListener('input', debounce(filterCleanups, 300));
+        }
 
-    if (dateFilter) {
-        dateFilter.addEventListener('change', filterCleanups);
-    }
+        if (dateFilter) {
+            dateFilter.addEventListener('change', filterCleanups);
+        }
 
-    // Explore button
-    const exploreBtn = document.getElementById('exploreBtn');
-    if (exploreBtn) {
-        exploreBtn.addEventListener('click', () => {
-            document.querySelector('.map-section').scrollIntoView({ behavior: 'smooth' });
-        });
-    }
+        // Explore button
+        const exploreBtn = document.getElementById('exploreBtn');
+        if (exploreBtn) {
+            exploreBtn.addEventListener('click', () => {
+                try {
+                    document.querySelector('.map-section').scrollIntoView({ behavior: 'smooth' });
+                } catch (error) {
+                    console.warn('Error scrolling to map:', error);
+                }
+            });
+        }
 
-    // Load images lazily
-    lazyLoadImages();
+        // Load images lazily
+        lazyLoadImages();
 
-    // Detect user location (with permission)
-    if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const { latitude, longitude } = position.coords;
-                appState.currentLocation = { lat: latitude, lng: longitude };
-                // In production, reinitialize map with user location
-                console.log('User location:', latitude, longitude);
-            },
-            (error) => {
-                console.log('Geolocation permission denied or unavailable:', error);
-            }
-        );
-    }
+        // Detect user location (with permission)
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    try {
+                        const { latitude, longitude } = position.coords;
+                        appState.currentLocation = { lat: latitude, lng: longitude };
+                        console.log('User location:', latitude, longitude);
+                    } catch (error) {
+                        console.warn('Error processing geolocation:', error);
+                    }
+                },
+                (error) => {
+                    console.log('Geolocation unavailable:', error.message);
+                }
+            );
+        }
 
-    // Register Service Worker for PWA capability (optional)
-    if ('serviceWorker' in navigator) {
-        // navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
+        // Register Service Worker for PWA capability (optional)
+        if ('serviceWorker' in navigator) {
+            // navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
+        }
+
+        console.log('ShoreSquad initialized successfully');
+    } catch (error) {
+        console.error('Critical error initializing ShoreSquad:', error);
+        showNotification('❌ Failed to initialize application. Please refresh the page.', 'error');
     }
 });
 
