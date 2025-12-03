@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ShoreSquad: Rally your crew, track weather, and hit the next beach cleanup. Join the eco-action movement!">
+    <meta name="theme-color" content="#0077BE">
+    <meta name="og:title" content="ShoreSquad - Beach Cleanup Made Social">
+    <meta name="og:description" content="Plan cleanups, track weather, and mobilize your crew for eco-action.">
+    <meta name="og:image" content="https://shoresquad.app/og-image.png">
+    
+    <title>ShoreSquad – Beach Cleanup Map & Weather</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- Leaflet Map Library -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar" role="navigation" aria-label="Main navigation">
+        <div class="navbar-container">
+            <a href="#" class="logo" aria-label="ShoreSquad Home">
+                <span class="logo-icon">🌊</span>
+                <span class="logo-text">ShoreSquad</span>
+            </a>
+            <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu" aria-expanded="false">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <ul class="nav-menu" id="navMenu" role="menubar">
+                <li><a href="#explore" role="menuitem">Explore</a></li>
+                <li><a href="#crew" role="menuitem">My Crew</a></li>
+                <li><a href="#cleanups" role="menuitem">Cleanups</a></li>
+                <li><a href="#profile" role="menuitem">Profile</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Hero Section -->
+        <section class="hero" aria-labelledby="hero-title">
+            <h1 id="hero-title">Rally Your Crew</h1>
+            <p class="hero-subtitle">Find beach cleanups, check the weather, and make an impact together.</p>
+            <button class="btn btn-primary" id="exploreBtn" aria-label="Explore cleanups near you">
+                📍 Find Cleanups Near You
+            </button>
+        </section>
+
+        <!-- Map Section -->
+        <section class="map-section" aria-labelledby="map-title">
+            <h2 id="map-title">Cleanup Locations</h2>
+            <div id="map" class="map-container" role="region" aria-label="Interactive map of beach cleanups"></div>
+        </section>
+
+        <!-- Weather & Info Section -->
+        <section class="weather-section" aria-labelledby="weather-title">
+            <h2 id="weather-title">Weather Forecast</h2>
+            <div class="weather-container" id="weatherContainer" role="region" aria-label="Weather forecast for selected location">
+                <p class="placeholder">Select a location on the map to see weather.</p>
+            </div>
+        </section>
+
+        <!-- Cleanups List Section -->
+        <section class="cleanups-section" aria-labelledby="cleanups-title">
+            <h2 id="cleanups-title">Upcoming Cleanups</h2>
+            <div class="filters">
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    class="search-box" 
+                    placeholder="Search cleanups..." 
+                    aria-label="Search cleanups by name or location"
+                >
+                <select id="dateFilter" class="filter-select" aria-label="Filter by date">
+                    <option value="">All Dates</option>
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                </select>
+            </div>
+            <ul class="cleanups-list" id="cleanupsList" role="list">
+                <!-- Dynamically populated -->
+            </ul>
+        </section>
+
+        <!-- Impact Dashboard Section -->
+        <section class="impact-section" aria-labelledby="impact-title">
+            <h2 id="impact-title">Your Impact</h2>
+            <div class="impact-stats">
+                <div class="stat-card" aria-label="Cleanups joined">
+                    <span class="stat-number" id="cleanupCount">0</span>
+                    <span class="stat-label">Cleanups Joined</span>
+                </div>
+                <div class="stat-card" aria-label="Total impact in kilograms">
+                    <span class="stat-number" id="impactKg">0</span>
+                    <span class="stat-label">kg Collected</span>
+                </div>
+                <div class="stat-card" aria-label="Crew members">
+                    <span class="stat-number" id="crewCount">0</span>
+                    <span class="stat-label">Crew Members</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2025 ShoreSquad. Rally your crew. Clean our coasts. 🌍</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="js/app.js" defer></script>
+</body>
+</html>
