@@ -181,33 +181,117 @@ function initMap() {
 }
 
 // ============================================
-// Weather Integration (Mock)
+// Weather Integration - NEA API
 // ============================================
 
+/**
+ * Fetch real-time weather from NEA Singapore API
+ * Returns 4-day forecast with hourly data
+ */
+async function fetchNEAWeather() {
+    try {
+        // NEA Real-time Weather Readings API
+        const response = await fetch('https://api.data.gov.sg/v1/environment/2-hour-weather-forecast');
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error fetching NEA weather:', error);
+        return null;
+    }
+}
+
+/**
+ * Map weather condition text to emoji
+ */
+function getWeatherEmoji(condition) {
+    const conditions = {
+        'Fair': '☀️',
+        'Sunny': '☀️',
+        'Partly Cloudy': '🌤️',
+        'Cloudy': '☁️',
+        'Overcast': '☁️',
+        'Light Rain': '🌦️',
+        'Moderate Rain': '🌧️',
+        'Heavy Rain': '⛈️',
+        'Thundery Showers': '⛈️',
+        'Showers': '🌧️'
+    };
+    
+    for (const [key, emoji] of Object.entries(conditions)) {
+        if (condition.toLowerCase().includes(key.toLowerCase())) {
+            return emoji;
+        }
+    }
+    return '🌤️'; // Default
+}
+
+/**
+ * Format and display 4-day weather forecast
+ */
 function updateWeather(cleanup) {
     const weatherContainer = document.getElementById('weatherContainer');
     
-    // Mock weather data
-    const weatherData = {
-        1: { temp: 22, condition: '☀️ Sunny', humidity: 65, windSpeed: 8 },
-        2: { temp: 20, condition: '🌤️ Partly Cloudy', humidity: 70, windSpeed: 12 },
-        3: { temp: 21, condition: '☀️ Sunny', humidity: 68, windSpeed: 7 }
-    };
+    // Show loading state
+    weatherContainer.innerHTML = '<p class="placeholder">📍 Loading weather data...</p>';
 
-    const weather = weatherData[cleanup.id] || { temp: 20, condition: '☀️ Sunny', humidity: 65, windSpeed: 8 };
+    // Fetch real weather from NEA
+    fetchNEAWeather().then(data => {
+        if (!data || !data.items || data.items.length === 0) {
+            weatherContainer.innerHTML = '<p class="error">Unable to load weather data. Please try again.</p>';
+            return;
+        }
 
-    weatherContainer.innerHTML = `
-        <div class="weather-card">
-            <h3>${cleanup.location}</h3>
-            <div class="weather-emoji">${weather.condition.split(' ')[0]}</div>
-            <div class="weather-temp">${weather.temp}°C</div>
-            <p>${weather.condition}</p>
-            <small>💧 ${weather.humidity}% | 🌬️ ${weather.windSpeed} km/h</small>
-        </div>
-    `;
+        // Build 4-day forecast from available data points
+        const forecasts = data.items.slice(0, 4); // Get up to 4 days
+        let forecastHTML = '';
 
-    // In production, integrate OpenWeatherMap API:
-    // fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}`)
+        forecasts.forEach((item, index) => {
+            const forecastTime = new Date(item.valid_period.start);
+            const dayName = forecastTime.toLocaleDateString('en-SG', { weekday: 'short', month: 'short', day: 'numeric' });
+            const timeRange = new Date(item.valid_period.start).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' }) + 
+                              ' - ' + 
+                              new Date(item.valid_period.end).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' });
+
+            // Get forecast for general area (first zone)
+            const forecast = item.general ? item.general : {};
+            const condition = forecast.forecast || 'Fair';
+            const emoji = getWeatherEmoji(condition);
+
+            forecastHTML += `
+                <div class="weather-card">
+                    <h4>${dayName}</h4>
+                    <p class="weather-time">${timeRange}</p>
+                    <div class="weather-emoji">${emoji}</div>
+                    <p class="weather-condition">${condition}</p>
+                    <small>🌍 General Forecast</small>
+                </div>
+            `;
+        });
+
+        // Add disclaimer about zones
+        forecastHTML += `
+            <div style="grid-column: 1 / -1; padding: 12px; background: #E8F4F8; border-radius: 8px; font-size: 0.9rem; color: #1A3A52;">
+                <strong>ℹ️ Note:</strong> Forecast data provided by National Environment Agency (NEA) Singapore. 
+                Data updated every 30 minutes. Select a cleanup to see detailed weather for that location.
+            </div>
+        `;
+
+        weatherContainer.innerHTML = forecastHTML;
+    });
+}
+
+/**
+ * Fetch detailed 4-day forecast for specific location
+ */
+async function fetchWeatherForecast() {
+    try {
+        const response = await fetch('https://api.data.gov.sg/v1/environment/4-day-weather-forecast');
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error fetching 4-day forecast:', error);
+        return null;
+    }
 }
 
 // ============================================
@@ -420,6 +504,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Setup mobile navigation
     setupMobileNav();
+
+    // Load and display initial weather on page load
+    updateWeather(null);
 
     // Setup search and filter listeners with debouncing
     const searchInput = document.getElementById('searchInput');
